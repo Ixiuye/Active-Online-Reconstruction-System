@@ -1,0 +1,329 @@
+{
+  "config": {
+    "steps": 6,
+    "iters_per_step": 150,
+    "static_iters": 500,
+    "rays": 768,
+    "max_gauss": 6000,
+    "device": "auto",
+    "policy": "rl",
+    "policy_ckpt": "outputs/ablate/rl_quality02.pt",
+    "noise": 0.02,
+    "seed": 2,
+    "quick": false
+  },
+  "device": "cuda",
+  "views": 9,
+  "voxel_stats": {
+    "voxels": 12400,
+    "unknown": 3278,
+    "free": 7785,
+    "surface": 1379
+  },
+  "init": {
+    "gaussians": 1175,
+    "chamfer_mean_cm": 3.9910571304475866,
+    "chamfer_p90_cm": 4.614090244726764,
+    "normal_err_deg": 15.092931747436523,
+    "free_violation_pct": 0.0,
+    "depth_rmse_cm": 11.839525401592255,
+    "psnr_db": 9.708619029403811,
+    "coverage_pct": 18.160063812815743
+  },
+  "progress": [
+    {
+      "gaussians": 1175,
+      "chamfer_mean_cm": 2.1678508589939383,
+      "chamfer_p90_cm": 5.101138069853961,
+      "normal_err_deg": 14.067395210266113,
+      "free_violation_pct": 0.0,
+      "depth_rmse_cm": 4.366327077150345,
+      "psnr_db": 14.345526919548385,
+      "coverage_pct": 18.160063812815743
+    },
+    {
+      "gaussians": 1408,
+      "chamfer_mean_cm": 2.236541238522348,
+      "chamfer_p90_cm": 5.3798933420278034,
+      "normal_err_deg": 15.035114288330078,
+      "free_violation_pct": 0.4261363636363636,
+      "depth_rmse_cm": 5.480723455548286,
+      "psnr_db": 14.275407641559436,
+      "coverage_pct": 27.70539750066472
+    },
+    {
+      "gaussians": 1507,
+      "chamfer_mean_cm": 2.2070327341812996,
+      "chamfer_p90_cm": 5.024055367308322,
+      "normal_err_deg": 15.589290618896484,
+      "free_violation_pct": 0.26542800265428,
+      "depth_rmse_cm": 5.448395386338234,
+      "psnr_db": 14.767686142442294,
+      "coverage_pct": 32.94336612603031
+    },
+    {
+      "gaussians": 1566,
+      "chamfer_mean_cm": 2.136986904420635,
+      "chamfer_p90_cm": 4.107518019321085,
+      "normal_err_deg": 16.12978744506836,
+      "free_violation_pct": 0.2554278416347382,
+      "depth_rmse_cm": 5.379786714911461,
+      "psnr_db": 14.763558602297875,
+      "coverage_pct": 37.17096516883808
+    },
+    {
+      "gaussians": 1626,
+      "chamfer_mean_cm": 2.1341743854575617,
+      "chamfer_p90_cm": 4.040868868932609,
+      "normal_err_deg": 16.654766082763672,
+      "free_violation_pct": 0.24600246002460024,
+      "depth_rmse_cm": 4.9250684678554535,
+      "psnr_db": 15.087151951326142,
+      "coverage_pct": 43.39271470353629
+    },
+    {
+      "gaussians": 1656,
+      "chamfer_mean_cm": 2.041643375487696,
+      "chamfer_p90_cm": 3.5575403169708752,
+      "normal_err_deg": 16.872949600219727,
+      "free_violation_pct": 0.24154589371980675,
+      "depth_rmse_cm": 4.9237653613090515,
+      "psnr_db": 16.752200938786054,
+      "coverage_pct": 48.41797394310024
+    }
+  ],
+  "comparison": {
+    "init": {
+      "gaussians": 1379,
+      "chamfer_mean_cm": 4.085903418921891,
+      "chamfer_p90_cm": 4.684332203003149,
+      "normal_err_deg": 14.69021224975586,
+      "free_violation_pct": 0.0,
+      "depth_rmse_cm": 11.893872171640396,
+      "psnr_db": 7.906741767088259,
+      "coverage_pct": 48.41797394310024
+    },
+    "photo": {
+      "gaussians": 1379,
+      "chamfer_mean_cm": 4.109943983847359,
+      "chamfer_p90_cm": 6.832429918887244,
+      "normal_err_deg": 16.9117488861084,
+      "free_violation_pct": 7.686729514140682,
+      "depth_rmse_cm": 12.99826055765152,
+      "psnr_db": 19.027813353381365,
+      "coverage_pct": 48.41797394310024
+    },
+    "depth": {
+      "gaussians": 1379,
+      "chamfer_mean_cm": 2.623457450950717,
+      "chamfer_p90_cm": 5.895425339635511,
+      "normal_err_deg": 16.38662338256836,
+      "free_violation_pct": 0.7976794778825236,
+      "depth_rmse_cm": 4.773372411727905,
+      "psnr_db": 17.181823095764372,
+      "coverage_pct": 48.41797394310024
+    },
+    "voxel": {
+      "gaussians": 1379,
+      "chamfer_mean_cm": 2.093097039827225,
+      "chamfer_p90_cm": 3.8939780243314273,
+      "normal_err_deg": 15.124886512756348,
+      "free_violation_pct": 0.0,
+      "depth_rmse_cm": 4.765249043703079,
+      "psnr_db": 17.19161008171144,
+      "coverage_pct": 48.41797394310024
+    }
+  },
+  "view_analysis": [
+    {
+      "name": "初始视角 1",
+      "depth_min_m": 0.7817555665969849,
+      "depth_mean_m": 1.7490259408950806,
+      "depth_max_m": 2.6014180183410645,
+      "depth_valid_pct": 100.0,
+      "visible_surface_voxels": 663,
+      "new_surface_voxels": 663
+    },
+    {
+      "name": "初始视角 3",
+      "depth_min_m": 0.638049304485321,
+      "depth_mean_m": 1.71085786819458,
+      "depth_max_m": 2.6314940452575684,
+      "depth_valid_pct": 100.0,
+      "visible_surface_voxels": 622,
+      "new_surface_voxels": 337
+    },
+    {
+      "name": "主动视角 A",
+      "depth_min_m": 0.8144592046737671,
+      "depth_mean_m": 1.72288179397583,
+      "depth_max_m": 2.507174491882324,
+      "depth_valid_pct": 100.0,
+      "visible_surface_voxels": 721,
+      "new_surface_voxels": 283
+    },
+    {
+      "name": "主动视角 B",
+      "depth_min_m": 0.9297252893447876,
+      "depth_mean_m": 1.778565526008606,
+      "depth_max_m": 2.7342352867126465,
+      "depth_valid_pct": 100.0,
+      "visible_surface_voxels": 456,
+      "new_surface_voxels": 333
+    },
+    {
+      "name": "高位分析视角",
+      "depth_min_m": 0.9867902994155884,
+      "depth_mean_m": 1.621893048286438,
+      "depth_max_m": 2.2624127864837646,
+      "depth_valid_pct": 100.0,
+      "visible_surface_voxels": 471,
+      "new_surface_voxels": 64
+    },
+    {
+      "name": "留出视角",
+      "depth_min_m": 1.0085599422454834,
+      "depth_mean_m": 1.476611614227295,
+      "depth_max_m": 2.063567876815796,
+      "depth_valid_pct": 100.0,
+      "visible_surface_voxels": 367,
+      "new_surface_voxels": 17
+    }
+  ],
+  "per_view_eval": {
+    "初始视角 1": {
+      "init": {
+        "depth_rmse_cm": 21.008414030075073,
+        "psnr_db": 7.737866968517384
+      },
+      "photo": {
+        "depth_rmse_cm": 15.692582726478577,
+        "psnr_db": 24.64310460156756
+      },
+      "depth": {
+        "depth_rmse_cm": 6.823298335075378,
+        "psnr_db": 23.097108970851927
+      },
+      "voxel": {
+        "depth_rmse_cm": 7.960125058889389,
+        "psnr_db": 21.89382010990098
+      }
+    },
+    "初始视角 3": {
+      "init": {
+        "depth_rmse_cm": 15.537723898887634,
+        "psnr_db": 8.363197311635702
+      },
+      "photo": {
+        "depth_rmse_cm": 13.024438917636871,
+        "psnr_db": 28.318912292223352
+      },
+      "depth": {
+        "depth_rmse_cm": 6.137396395206451,
+        "psnr_db": 26.50798437162659
+      },
+      "voxel": {
+        "depth_rmse_cm": 7.0810019969940186,
+        "psnr_db": 25.557012520168477
+      }
+    },
+    "主动视角 A": {
+      "init": {
+        "depth_rmse_cm": 13.201504945755005,
+        "psnr_db": 8.020009030462523
+      },
+      "photo": {
+        "depth_rmse_cm": 19.203856587409973,
+        "psnr_db": 26.245727589295743
+      },
+      "depth": {
+        "depth_rmse_cm": 5.436253547668457,
+        "psnr_db": 24.701120908854477
+      },
+      "voxel": {
+        "depth_rmse_cm": 5.675327032804489,
+        "psnr_db": 23.16746378952577
+      }
+    },
+    "主动视角 B": {
+      "init": {
+        "depth_rmse_cm": 14.879655838012695,
+        "psnr_db": 7.495511238712815
+      },
+      "photo": {
+        "depth_rmse_cm": 28.59216332435608,
+        "psnr_db": 26.593497004689276
+      },
+      "depth": {
+        "depth_rmse_cm": 5.486898124217987,
+        "psnr_db": 23.53318054088103
+      },
+      "voxel": {
+        "depth_rmse_cm": 5.5984873324632645,
+        "psnr_db": 21.452327440309947
+      }
+    },
+    "高位分析视角": {
+      "init": {
+        "depth_rmse_cm": 12.353737652301788,
+        "psnr_db": 7.8884241785117295
+      },
+      "photo": {
+        "depth_rmse_cm": 12.706568837165833,
+        "psnr_db": 19.843537482335268
+      },
+      "depth": {
+        "depth_rmse_cm": 5.619589984416962,
+        "psnr_db": 18.030814242876698
+      },
+      "voxel": {
+        "depth_rmse_cm": 6.13766722381115,
+        "psnr_db": 17.76612737891113
+      }
+    },
+    "留出视角": {
+      "init": {
+        "depth_rmse_cm": 11.893872171640396,
+        "psnr_db": 7.906741767088259
+      },
+      "photo": {
+        "depth_rmse_cm": 12.99826055765152,
+        "psnr_db": 19.0278136767261
+      },
+      "depth": {
+        "depth_rmse_cm": 4.773372039198875,
+        "psnr_db": 17.18182267300161
+      },
+      "voxel": {
+        "depth_rmse_cm": 4.765248671174049,
+        "psnr_db": 17.191609234278385
+      }
+    }
+  },
+  "per_view_summary": {
+    "init": {
+      "depth_rmse_cm_mean": 14.812484756112099,
+      "depth_rmse_cm_std": 3.0572050423144996,
+      "psnr_db_mean": 7.901958415821401,
+      "psnr_db_std": 0.2642626955373206
+    },
+    "photo": {
+      "depth_rmse_cm_mean": 17.036311825116474,
+      "depth_rmse_cm_std": 5.644897676452342,
+      "psnr_db_mean": 24.112098774472884,
+      "psnr_db_std": 3.4823250546582996
+    },
+    "depth": {
+      "depth_rmse_cm_mean": 5.712801404297352,
+      "depth_rmse_cm_std": 0.6366855908183949,
+      "psnr_db_mean": 22.175338618015388,
+      "psnr_db_std": 3.414602818949983
+    },
+    "voxel": {
+      "depth_rmse_cm_mean": 6.20297621935606,
+      "depth_rmse_cm_std": 1.0467129148446923,
+      "psnr_db_mean": 21.17139341218245,
+      "psnr_db_std": 2.9227069368829706
+    }
+  }
+}
