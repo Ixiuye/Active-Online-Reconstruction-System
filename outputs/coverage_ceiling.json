@@ -1,0 +1,41 @@
+{
+  "gt_surface_voxels": 3761,
+  "results": {
+    "demo9_heuristic": {
+      "n_views": 9,
+      "coverage_pct": 55.57032704068067
+    },
+    "grid144": {
+      "n_views": 148,
+      "coverage_pct": 89.17840999734113
+    },
+    "random200": {
+      "n_views": 204,
+      "coverage_pct": 92.42222813081628,
+      "unseen_voxels": 285
+    },
+    "floorceil200": {
+      "n_views": 204,
+      "coverage_pct": 92.68811486306834,
+      "unseen_voxels": 275
+    },
+    "dense600": {
+      "n_views": 604,
+      "coverage_pct": 93.21988832757245,
+      "unseen_voxels": 255
+    },
+    "dense1200": {
+      "n_views": 1204,
+      "coverage_pct": 93.21988832757245,
+      "unseen_voxels": 255
+    },
+    "_sweep_vs_views": {
+      "9": 41.797394310023925,
+      "20": 64.69024195692636,
+      "40": 87.37038021802712,
+      "80": 90.58760967827706,
+      "160": 93.06035628822121,
+      "320": 92.23610741823983
+    }
+  }
+}

@@ -149,20 +149,35 @@ python ablate_rl.py --episodes 400 --noise 0.01       # 换预算/噪声
 
 ## 6. 代码结构
 
+四层，职责单一；根目录脚本只是薄壳（`from active_recon.experiment.X import main`），
+`demo/` 保留为兼容层，旧 import 仍可用。
+
 ```
-run_demo.py          端到端主流程、训练调度、评估、绘图（--policy heuristic|rl）
-train_rl.py          PPO 训练主动探索策略（随机化场景 + 深度噪声，只读地图的奖励）
-ablate_rl.py         奖励项消融：w_quality × w_conflict 的 2×2
-eval_policies.py     同题对照：随机 / 启发式 NBV / 学习策略
-noise_study.py       点云表征 vs 体素-高斯（噪声实验）
-demo/scene.py        解析式室内场景：SDF、程序化颜色、GT RGB-D、GT 表面采样
-demo/voxel_map.py    TSDF 融合、三线性查询（numpy/torch）、置信度与状态、frontier
-demo/gaussians.py    锚定高斯的参数化、spawn/prune 生命周期
-demo/renderer.py     可微 ray-splat 渲染
-demo/losses.py       体素几何约束（表面/法向/自由空间/旋转先验）
-demo/active.py       启发式 NBV：候选视点、可见性评分、效用选择
-demo/rl_active.py    学习型 NBV：候选特征、策略网络、探索环境、PPO（§5.1）
-demo/utils.py        相机 look-at、像素射线
+active_recon/
+  common/            共享基础
+    camera.py        分辨率/内参 K、View、render_scene_view、深度噪声开关 set_depth_noise
+    scene.py         解析式室内场景：SDF、程序化颜色、GT RGB-D、GT 表面采样
+    utils.py         look_at、像素射线；paths.py 统一产物目录 outputs/
+  reconstruction/    重建
+    voxel_map.py     TSDF 融合、三线性查询、置信度与状态、frontier
+    gaussians.py     锚定高斯的参数化、spawn/prune 生命周期
+    losses.py        体素几何约束（表面/法向/自由空间/旋转先验）
+    renderer.py      可微 ray-splat 渲染
+    tsdf_render.py   TSDF 球面追迹渲染 + map_error（命中率/中位深度误差/光度误差）
+    trainer.py       高斯训练循环（photo / depth / voxel 三种模式）
+    metrics.py       Chamfer/法向/违规/深度 RMSE/PSNR/覆盖率，逐视角分析
+  viewpoint/         视点选择
+    heuristic.py     原手工 NBV（frontier 权重 + 路程罚），作为基线
+    rl.py            均匀采样候选 + 细化、14 维特征、策略网络、PPO、探索环境
+  experiment/        训练与实验
+    run_demo.py      端到端 demo（--policy heuristic|rl、--noise、--seed）
+    train_policy.py  PPO 训练（--w-* 奖励权重、--refine-rounds、--tag）
+    eval_policies.py 同题对照：随机 / 启发式 / 学习策略
+    ablate_reward.py 奖励项消融（2×2 + quality02）
+    pointcloud.py    点云表征 vs 体素-高斯（噪声实验）
+    coverage_analysis.py 覆盖率上限与"覆盖率 vs 视角数"曲线
+    conflict_analysis.py conflict 指标三种写法的噪声敏感性
+    plots.py         所有绘图函数
 ```
 
 ## 7. 运行
@@ -235,6 +250,35 @@ Windows 下也可直接双击 `run.bat`，或命令行 `run.bat --quick`。
 
 注意：PSNR 绝对值不高是简化渲染器和“每个 8 cm 体素一个高斯”的分辨率限制导致的，本 demo 的重点是几何指标。
 主动探索过程中覆盖率从 18% 提升到 56%，Chamfer 从 2.12 cm 降到 1.84 cm（增量模型）。
+
+### 8.0 学习型 NBV vs 手工 NBV（同一决策预算、3 个训练种子 × 3 个评估 seed）
+
+协议统一后（`--explore-steps 6` = 6 次主动决策，σ=2 cm 深度噪声）：
+
+| 策略 | 覆盖率 | Chamfer (cm) | 法向 (°) | 自由空间违规 (%) | 深度 RMSE (cm) | PSNR (dB) |
+|---|---|---|---|---|---|---|
+| 手工 NBV（frontier+路程） | 55.88 ± 0.20 | 2.17 ± 0.02 | 14.17 ± 0.13 | 0.18 ± 0.13 | 5.36 ± 0.23 | 14.93 ± 0.38 |
+| 学习策略（3 训练种子均值） | 55.67 ± 1.52 | **2.11 ± 0.02** | **13.48 ± 0.28** | **0.06 ± 0.04** | **4.64 ± 0.05** | **17.05 ± 0.88** |
+| 学习策略（3 策略 logits 集成） | **57.38 ± 3.86** | 2.13 ± 0.01 | **12.98 ± 0.47** | 0.15 ± 0.07 | **3.99 ± 0.28** | **18.00 ± 1.74** |
+
+- 覆盖率：学习策略与手工 NBV 持平（55.67 vs 55.88），集成版反而更高（57.38）。
+- 几何：学习策略全面更好 —— 深度 RMSE −13%（集成版 −26%）、法向 −0.7°（集成 −1.2°）、
+  Chamfer −0.06 cm、自由空间违规 0.18%→0.06%、PSNR +2.1 dB（集成 +3.1 dB）。
+- **方差来源已定位**：三个训练种子的覆盖率均值 54.13/57.74/55.14，策略间 std 仅 1.52；
+  表里的 ±4 量级来自**评估 seed**（场景随机化 + 目标点采样），不是训练不稳定。
+  要压方差应改评估协议（更多决策步 / 固定目标采样），而不是多训策略。
+- 集成用法：`--policy-ckpt a.pt,b.pt,c.pt`（logits 与 value 取平均；单权重路径不变）。
+- 决策数口径：`run_demo.py --steps N` 中 step 0 只训练不选点，故决策数 = N−1；
+  现在用 `--explore-steps` 直接指定决策数（这一度造成"RL 覆盖差 6 pp"的假象）。
+
+覆盖率还受**视角预算**限制（`analyze_coverage.py` 实测，同一 GT 场景、同一口径）：
+
+| 视角数 | 9 | 20 | 40 | 80 | 160 | 几何上限 |
+|---|---|---|---|---|---|---|
+| 覆盖率 | 55.6% | 64.7% | 87.4% | 90.6% | 93.1% | 93.2% |
+
+上限 93.2% 不是算法限制：剩余 6.8% 的 GT 表面带体素是房间墙体的**外侧**零水平集，相机在室内永远看不到。
+所以本 demo 的 9~10 视角协议下 55%~58% 已接近该预算的可达上限，与“SOTA 90%+”不是同一口径（后者通常几十到上千视角）。
 
 ### 8.1 GT 视角集与逐视角分析（补充）
 

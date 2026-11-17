@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "episodes": 2,
+    "steps": 6,
+    "seed": 0,
+    "hidden": 64,
+    "lr": 0.0003,
+    "n_cand": 64,
+    "depth_noise": 0.02,
+    "weights": {
+      "surf": 1.0,
+      "quality": 0.0,
+      "conflict": 2.0,
+      "path": 0.3
+    },
+    "reward": "1.0*Δsurface/100 + 0.0*quality - 2.0*conflict - 0.3*path",
+    "action_space": "uniform-sampled candidates (K=64/step)",
+    "algo": "PPO"
+  },
+  "history": [
+    {
+      "episode": 1,
+      "return": -4.405764817656099,
+      "new_known": 1293,
+      "new_surface": 390,
+      "quality": 0.5091980795065562,
+      "path": 8.423551738262177,
+      "coverage": 0.419925013390466
+    },
+    {
+      "episode": 2,
+      "return": -1.6229012249390153,
+      "new_known": 872,
+      "new_surface": 680,
+      "quality": 0.47366906702518463,
+      "path": 6.62307870388031,
+      "coverage": 0.3590944574551132
+    }
+  ]
+}
