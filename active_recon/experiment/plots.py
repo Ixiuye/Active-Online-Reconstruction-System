@@ -164,46 +164,47 @@ def plot_per_view_metrics(per_view, display_views, path):
 
 
 def plot_depth_models(display_views, models, per_view, path):
-    """逐视角深度图对比：GT / 纯光度 / 纯光度误差 / 体素约束 / 体素误差。"""
+    """逐视角深度图对比：GT / 纯光度 / +深度 / +体素，每个模型带 |误差| 图。"""
     if len(display_views) >= 6:
         sel = [display_views[0], display_views[3], display_views[4], display_views[5]]
     else:
         sel = display_views
     n = len(sel)
-    fig, axes = plt.subplots(n, 5, figsize=(16, 2.9 * n))
+    model_names = ["photo", "depth", "voxel"]
+    labels = {"photo": "纯光度", "depth": "+深度", "voxel": "+体素"}
+    ncols = 1 + 2 * len(model_names)
+    fig, axes = plt.subplots(n, ncols, figsize=(3.2 * ncols, 2.9 * n))
     axes = np.atleast_2d(axes)
     im_d = im_e = None
     for i, (name, view) in enumerate(sel):
-        _, d_p, acc_p = render_full(models["photo"], view)
-        _, d_v, acc_v = render_full(models["voxel"], view)
         valid = view.depth > 0
-        m_p = valid & (acc_p > 0.3)
-        m_v = valid & (acc_v > 0.3)
-        d_p_show = np.where(m_p, d_p, np.nan)
-        d_v_show = np.where(m_v, d_v, np.nan)
-        e_p = np.where(m_p, np.abs(d_p - view.depth) * 100.0, np.nan)
-        e_v = np.where(m_v, np.abs(d_v - view.depth) * 100.0, np.nan)
-        rp = per_view[name]["photo"]["depth_rmse_cm"]
-        rv = per_view[name]["voxel"]["depth_rmse_cm"]
-        axes[i, 0].imshow(view.depth, cmap="viridis", vmin=0.2, vmax=3.0)
+        im_d = axes[i, 0].imshow(view.depth, cmap="viridis", vmin=0.2, vmax=3.0)
+        rms = []
+        for j, mname in enumerate(model_names):
+            _, d_m, acc_m = render_full(models[mname], view)
+            m = valid & (acc_m > 0.3)
+            d_show = np.where(m, d_m, np.nan)
+            e = np.where(m, np.abs(d_m - view.depth) * 100.0, np.nan)
+            c_depth = 1 + 2 * j
+            axes[i, c_depth].imshow(d_show, cmap="viridis", vmin=0.2, vmax=3.0)
+            im_e = axes[i, c_depth + 1].imshow(e, cmap="magma", vmin=0, vmax=20)
+            rms.append(f"{labels[mname]} {per_view[name][mname]['depth_rmse_cm']:.1f}")
         axes[i, 0].set_ylabel(
-            f"{name}\n纯光度 {rp:.1f} cm\n体素 {rv:.1f} cm", fontsize=7
+            f"{name}\n" + " / ".join(rms) + " cm", fontsize=7
         )
-        im_d = axes[i, 1].imshow(d_p_show, cmap="viridis", vmin=0.2, vmax=3.0)
-        im_e = axes[i, 2].imshow(e_p, cmap="magma", vmin=0, vmax=20)
-        axes[i, 3].imshow(d_v_show, cmap="viridis", vmin=0.2, vmax=3.0)
-        axes[i, 4].imshow(e_v, cmap="magma", vmin=0, vmax=20)
         for a in axes[i]:
             a.set_xticks([])
             a.set_yticks([])
-    titles = ["GT 深度", "纯光度深度", "纯光度 |误差| (cm)", "体素约束深度", "体素约束 |误差| (cm)"]
+    titles = ["GT 深度"]
+    for mname in model_names:
+        titles += [f"{labels[mname]}深度", f"{labels[mname]} |误差| (cm)"]
     for j, t in enumerate(titles):
         axes[0, j].set_title(t, fontsize=9)
-    cax_d = fig.add_axes([0.93, 0.55, 0.01, 0.38])
+    cax_d = fig.add_axes([0.94, 0.55, 0.008, 0.38])
     fig.colorbar(im_d, cax=cax_d, label="深度 (m)")
-    cax_e = fig.add_axes([0.93, 0.10, 0.01, 0.38])
+    cax_e = fig.add_axes([0.94, 0.10, 0.008, 0.38])
     fig.colorbar(im_e, cax=cax_e, label="深度误差 (cm，截断到 0–20)")
-    fig.suptitle("深度图对比：纯光度 3DGS vs 体素约束")
+    fig.suptitle("深度图对比：纯光度 vs +深度监督 vs 体素约束")
     fig.tight_layout(rect=(0, 0, 0.92, 0.96))
     fig.savefig(path, dpi=160)
     plt.close(fig)

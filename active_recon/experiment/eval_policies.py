@@ -2,7 +2,7 @@
 
 每个 episode 用同一 seed 构建（同一初始视角 + 同一场景开关），三种策略各跑一遍：
 - random    : 在合法候选里均匀随机（下界）
-- heuristic : demo/active.select_nbv，utility = 可见目标权重 - 30 * 路程（原方法）
+- heuristic : active_recon/viewpoint/heuristic.select_nbv，utility = 可见目标权重 - 30 * 路程（原方法）
 - rl        : outputs/rl_policy.pt 的 PPO 策略
 
 指标（逐步记录）：新增已知体素、GT 表面覆盖率、累计路程；末尾给汇总表与曲线。
@@ -54,7 +54,12 @@ def run_episode(kind, seed, args, policy=None):
         else:
             with torch.no_grad():
                 logit, _ = policy(torch.as_tensor(feats)[None], torch.as_tensor(valid)[None])
-            a = int(torch.argmax(logit[0]))
+            if getattr(args, "sample", False):
+                probs = torch.softmax(logit[0], dim=-1).numpy()
+                probs = probs / max(probs.sum(), 1e-12)
+                a = int(rng.choice(len(probs), p=probs))
+            else:
+                a = int(torch.argmax(logit[0]))
         feats, valid, rew, done, info = env.step(a)
         steps.append(info)
         if done:
@@ -85,6 +90,8 @@ def main():
                     help="逐像素深度噪声 σ(m)，应与训练时一致才公平")
     ap.add_argument("--ckpt", default=None)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--sample", action="store_true",
+                    help="按策略分布采样选点（默认贪心 argmax；贪心在部分长 horizon 策略上会退化）")
     args = ap.parse_args()
 
     out_dir = str(OUTPUTS)

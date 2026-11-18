@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "episodes": 4,
+    "steps": 10,
+    "seed": 0,
+    "hidden": 64,
+    "lr": 0.0003,
+    "n_cand": 64,
+    "depth_noise": 0.02,
+    "weights": {
+      "surf": 1.0,
+      "quality": 0.0,
+      "conflict": 2.0,
+      "path": 0.3,
+      "rec": 0.0,
+      "fb": 0.8
+    },
+    "rec": {
+      "n_probe": 6,
+      "probe_stride": 8
+    },
+    "fb": {
+      "stride": 8
+    },
+    "cov": {
+      "target": 0.0,
+      "weight": 2.0
+    },
+    "refine": {
+      "rounds": 0,
+      "k": 64,
+      "topk": 8
+    },
+    "reward": "1.0*Δsurface/100 + 0.0*quality - 2.0*conflict - 0.3*path + 0.0*rec + 0.8*fb",
+    "action_space": "uniform-sampled candidates (K=64/step)",
+    "algo": "PPO"
+  },
+  "history": [
+    {
+      "episode": 1,
+      "return": -14.118257901789724,
+      "new_known": 3950,
+      "new_surface": 943,
+      "quality": 0.43030745089054107,
+      "path": 12.178964018821716,
+      "coverage": 0.5549009105516872
+    },
+    {
+      "episode": 2,
+      "return": 1.380354700679693,
+      "new_known": 4447,
+      "new_surface": 897,
+      "quality": 0.47755366265773774,
+      "path": 8.533344477415085,
+      "coverage": 0.41113713244860783
+    },
+    {
+      "episode": 3,
+      "return": 0.9972390012399217,
+      "new_known": 3339,
+      "new_surface": 1061,
+      "quality": 0.4654132008552551,
+      "path": 8.78355598449707,
+      "coverage": 0.5559536934950385
+    },
+    {
+      "episode": 4,
+      "return": 1.29238933584344,
+      "new_known": 4638,
+      "new_surface": 1354,
+      "quality": 0.4519647628068924,
+      "path": 10.203963369131088,
+      "coverage": 0.44556291390728475
+    }
+  ]
+}

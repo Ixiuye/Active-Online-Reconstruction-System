@@ -11,8 +11,9 @@
     outputs/rl_training.json  逐 episode 记录
 
 训练细节：
-- episode = 随机化场景 + 随机 3 个初始视角 + T 步策略决策；
-- 奖励 r = Δ已知体素/500 - 0.5 * 路径长度（只读 TSDF 地图，不用 GT）；
+- episode = 随机化场景 + 3~6 个随机初始视角 + T 步策略决策；
+- 奖励 r = Δ表面体素/100 + w_quality·深度可分性 − w_conflict·冲突 − w_path·路程
+  （另有 w_rec：检验视角上重建深度/光度误差的下降量，默认关闭）；
 - PPO：clip 0.2、GAE(γ=0.95, λ=0.95)、价值损失 0.5、熵奖励 0.01；
 - 覆盖率只在日志里用 GT 计算，不进入奖励。
 """
@@ -51,7 +52,11 @@ def main():
     ap.add_argument("--w-conflict", type=float, default=2.0, help="深度-地图冲突罚权重")
     ap.add_argument("--w-path", type=float, default=0.3, help="路程罚权重")
     ap.add_argument("--w-rec", type=float, default=0.0,
-                    help="重建侧奖励权重（检验视角上深度+光度误差的下降量）")
+                    help="重建侧奖励权重（固定检验视角上深度+光度误差的下降量，需 GT）")
+    ap.add_argument("--w-fb", type=float, default=0.0,
+                    help="当前观测反馈权重：融合前后地图对同一帧的深度+光度预测误差下降量（无 GT）")
+    ap.add_argument("--fb-stride", type=int, default=8,
+                    help="当前观测反馈的渲染下采样步长（越大越快）")
     ap.add_argument("--refine-rounds", type=int, default=0,
                     help="候选采样细化轮数（0=不细化；1=top-k 附近再采一轮）")
     ap.add_argument("--refine-k", type=int, default=64)
@@ -82,11 +87,13 @@ def main():
                          n_cand=args.n_cand, depth_noise=args.noise,
                          w_surf=args.w_surf, w_quality=args.w_quality,
                          w_conflict=args.w_conflict, w_path=args.w_path,
-                         w_rec=args.w_rec, refine_rounds=args.refine_rounds,
+                         w_rec=args.w_rec, fb_stride=args.fb_stride, w_fb=args.w_fb,
+                         refine_rounds=args.refine_rounds,
                          refine_k=args.refine_k, refine_topk=args.refine_topk,
                          cov_target=args.cov_target, w_cov=args.w_cov)
     print(f"奖励权重 surf={args.w_surf} quality={args.w_quality} "
-          f"conflict={args.w_conflict} path={args.w_path} rec={args.w_rec}；"
+          f"conflict={args.w_conflict} path={args.w_path} rec={args.w_rec} "
+          f"fb={args.w_fb}；"
           f"覆盖率约束 target={args.cov_target} w={args.w_cov}；"
           f"细化轮数={args.refine_rounds}；深度噪声 σ={args.noise*100:.1f} cm")
     policy = CandidatePolicy(hidden=args.hidden)
@@ -98,9 +105,16 @@ def main():
             "hidden": args.hidden, "lr": args.lr, "n_cand": args.n_cand,
             "depth_noise": args.noise,
             "weights": {"surf": args.w_surf, "quality": args.w_quality,
-                        "conflict": args.w_conflict, "path": args.w_path},
+                        "conflict": args.w_conflict, "path": args.w_path,
+                        "rec": args.w_rec, "fb": args.w_fb},
+            "rec": {"n_probe": 6, "probe_stride": 8},
+            "fb": {"stride": args.fb_stride},
+            "cov": {"target": args.cov_target, "weight": args.w_cov},
+            "refine": {"rounds": args.refine_rounds, "k": args.refine_k,
+                       "topk": args.refine_topk},
             "reward": f"{args.w_surf}*Δsurface/100 + {args.w_quality}*quality "
-                      f"- {args.w_conflict}*conflict - {args.w_path}*path",
+                      f"- {args.w_conflict}*conflict - {args.w_path}*path "
+                      f"+ {args.w_rec}*rec + {args.w_fb}*fb",
             "action_space": f"uniform-sampled candidates (K={args.n_cand}/step)",
             "algo": "PPO"}
     save_policy(ckpt, policy, meta)

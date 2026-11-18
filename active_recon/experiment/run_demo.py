@@ -11,7 +11,7 @@ from scipy.spatial import cKDTree
 
 from ..common.camera import (H_IMG, K, W_IMG, View, render_scene_view,
                              set_depth_noise)
-from ..common.scene import ROOM_MAX, ROOM_MIN, TRUNC, VOXEL_SIZE, DemoScene
+from ..common.scene import (ROOM_MAX, ROOM_MIN, TRUNC, VOXEL_SIZE, make_scene)
 from ..common.paths import OUTPUTS
 from ..common.utils import look_at
 from ..reconstruction.gaussians import VoxelGaussians
@@ -41,10 +41,18 @@ def main():
                         help="主动探索的选点策略：手工作用函数 或 PPO 学习策略")
     parser.add_argument("--policy-ckpt", default=None,
                         help="--policy rl 时加载的策略权重，默认 outputs/rl_policy.pt")
+    parser.add_argument("--sample-policy", action="store_true",
+                        help="RL 选点按策略分布采样（默认贪心 argmax；长 horizon 的贪心可能退化）")
     parser.add_argument("--noise", type=float, default=0.0,
                         help="采集视角的深度噪声 σ(m)，0=无噪声（与训练/评估一致才可比）")
     parser.add_argument("--seed", type=int, default=0,
                         help="全局随机种子（多 seed 几何统计用），默认 0 = 原基线")
+    parser.add_argument("--scene", default="demo", choices=["demo", "primitive", "robot"],
+                        help="重建场景：demo=原始房间(球/桌/柱)，primitive=单个几何体，robot=多关节机械臂")
+    parser.add_argument("--primitive", default="sphere", choices=["sphere", "box", "cylinder"],
+                        help="--scene primitive 时使用的几何体类型")
+    parser.add_argument("--voxel", type=float, default=None,
+                        help="体素边长 (m)；默认按场景选择（demo 0.08 / primitive 0.06 / robot 0.05）")
     parser.add_argument("--quick", action="store_true")
     args = parser.parse_args()
     if args.quick:
@@ -80,7 +88,10 @@ def main():
     policy_ckpt = ckpts[0] if len(ckpts) == 1 else ckpts
     print(f"主动探索策略 = {args.policy}" + (f"  ({policy_ckpt})" if args.policy == "rl" else ""))
 
-    scene = DemoScene()
+    scene = make_scene(args.scene, args.primitive)
+    voxel = float(args.voxel) if args.voxel else float(getattr(scene, "voxel_size", VOXEL_SIZE))
+    print(f"场景 = {args.scene}" + (f" ({args.primitive})" if args.scene == "primitive" else "")
+          + f"  体素 = {voxel*100:.1f} cm")
     initial_poses = [
         look_at((0.35, 0.35, 1.10), (1.20, 0.90, 0.55)),
         look_at((2.05, 0.35, 1.10), (1.20, 0.90, 0.55)),
@@ -94,7 +105,7 @@ def main():
         fwd = np.asarray(R).T @ np.array([0.0, 0.0, 1.0], np.float32)
         visited.append((pos, fwd))
 
-    vmap = DenseTSDF(ROOM_MIN, ROOM_MAX, VOXEL_SIZE, TRUNC, device=str(device))
+    vmap = DenseTSDF(ROOM_MIN, ROOM_MAX, voxel, TRUNC, device=str(device))
     for v in views:
         vmap.fuse(v.depth, v.rgb, v.R, v.t, K)
     print("初始体素统计:", vmap.stats())
@@ -124,6 +135,7 @@ def main():
                     policy_ckpt, vmap, pts, wts, kinds,
                     current_pos=views[-1].center_np, current_fwd=visited[-1][1],
                     visited=visited, K=K, H=H_IMG, W=W_IMG, device=str(device), rng=rng,
+                    greedy=not args.sample_policy,
                 )
             else:
                 pts, wts = sample_utility_targets(vmap, rng)

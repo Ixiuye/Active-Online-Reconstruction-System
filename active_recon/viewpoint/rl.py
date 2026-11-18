@@ -24,7 +24,7 @@ from pathlib import Path
 
 from .heuristic import candidate_poses, sample_utility_targets
 from ..common.scene import DemoScene, ROOM_MAX, ROOM_MIN, TRUNC, VOXEL_SIZE
-from ..reconstruction.tsdf_render import map_error
+from ..reconstruction.tsdf_render import map_error, render_tsdf
 from ..common.utils import look_at
 from ..reconstruction.voxel_map import DenseTSDF
 
@@ -322,6 +322,7 @@ class ExplorationEnv:
                  randomize=True, fixed_init=True, init_jitter=0.06, n_init_range=None,
                  n_cand=64, w_surf=1.0, w_quality=0.8, w_conflict=2.0, w_path=0.3,
                  w_rec=0.0, depth_noise=0.0, n_probe=6, probe_stride=8,
+                 w_fb=0.0, fb_stride=8,
                  refine_rounds=0, refine_k=64, refine_topk=8,
                  cov_target=0.0, w_cov=2.0):
         self.K, self.H, self.W = K, H, W
@@ -338,6 +339,9 @@ class ExplorationEnv:
             w_surf, w_quality, w_conflict, w_path)
         # 重建侧奖励：在固定检验视角上测"地图渲染 vs GT"的深度/光度误差，用其下降量当奖励
         self.w_rec = float(w_rec)
+        self.w_fb = float(w_fb)
+        self.fb_stride = int(fb_stride)
+        self.fb_ema = 1.0
         self.n_probe = n_probe
         self.probe_stride = probe_stride
         self.rec_ema = 1.0
@@ -414,6 +418,25 @@ class ExplorationEnv:
                 self.gt_color.append(c[::s, ::s].copy())
         return self._observe()
 
+    def _frame_error(self, depth, rgb, R, t):
+        """当前地图对刚采集这一帧的预测误差（深度 + 光度），不使用 GT。
+
+        用 TSDF 球面追迹在当前视角渲染地图，再与实测 RGB-D 比较。
+        stride 下采样以控制成本；返回 (hit_rate, 中位深度误差 cm, 光度 MSE)。
+        """
+        d_pred, c_pred, hit = render_tsdf(
+            self.vmap, R, t, self.K, self.H, self.W, stride=self.fb_stride
+        )
+        s = self.fb_stride
+        d = depth[::s, ::s]
+        c = rgb[::s, ::s]
+        valid = hit & (d > 0)
+        if not valid.any():
+            return 0.0, 0.0, 0.0
+        err = np.minimum(np.abs(d_pred[valid] - d[valid]) * 100.0, 200.0)
+        photo = float(np.mean((c_pred[valid] - c[valid]) ** 2))
+        return float(hit.mean()), float(np.median(err)), photo
+
     def _probe_error(self):
         """地图在检验视角上的 {hit_rate, med_err_cm, photo}。纯地图侧渲染，GT 只用来对照。"""
         if not self.probes:
@@ -452,6 +475,7 @@ class ExplorationEnv:
         path = float(np.linalg.norm(pos - self.current_pos))
         err0 = self._probe_error() if self.w_rec > 0 else None
         depth, rgb = self._render(R, t)
+        fb0 = self._frame_error(depth, rgb, R, t) if self.w_fb > 0 else None
         self.vmap.fuse(depth, rgb, R, t, self.K)
         fwd = tgt - pos
         fwd = fwd / max(np.linalg.norm(fwd), 1e-8)
@@ -475,9 +499,18 @@ class ExplorationEnv:
                    + (err0["photo"] - err1["photo"]))
             self.rec_ema = 0.95 * self.rec_ema + 0.05 * max(abs(raw), 1e-3)
             r_rec = raw / self.rec_ema
+        # 当前观测反馈：融合前后，地图对同一帧的深度/光度预测误差下降量（无 GT）
+        r_fb, fb1 = 0.0, (0.0, 0.0, 0.0)
+        if self.w_fb > 0 and fb0 is not None:
+            fb1 = self._frame_error(depth, rgb, R, t)
+            raw_fb = (100.0 * (fb1[0] - fb0[0])
+                      + (fb0[1] - fb1[1])
+                      + 20.0 * (fb0[2] - fb1[2]))
+            self.fb_ema = 0.95 * self.fb_ema + 0.05 * max(abs(raw_fb), 1e-3)
+            r_fb = raw_fb / self.fb_ema
         reward = (self.w_surf * d_surf / 100.0 + self.w_quality * quality
                   - self.w_conflict * conflict - self.w_path * path
-                  + self.w_rec * r_rec)
+                  + self.w_rec * r_rec + self.w_fb * r_fb)
         # 覆盖率软约束：低于目标时按缺口线性罚（越缺罚越狠），高于目标不奖励
         cov_now = self.coverage()
         cov_pen = self.w_cov * max(0.0, self.cov_target - cov_now) if self.cov_target > 0 else 0.0
@@ -487,6 +520,7 @@ class ExplorationEnv:
                 "quality": quality, "conflict": conflict, "n_surf_px": n_surf,
                 "rec": r_rec, "hit_rate": err1["hit_rate"],
                 "err_depth_cm": err1["med_err_cm"], "err_photo": err1["photo"],
+                "fb": r_fb, "fb_hit": fb1[0], "fb_depth_cm": fb1[1], "fb_photo": fb1[2],
                 "cov_pen": cov_pen,
                 "coverage": cov_now, "known_total": known_now, "reward": reward}
         if self.t >= self.steps:
@@ -649,7 +683,7 @@ class MapSampler:
 
 def select_nbv_rl(ckpt, vmap, points, weights, kinds, current_pos, current_fwd,
                   visited, K, H, W, device="cpu", rng=None, n_cand=64,
-                  refine_rounds=0, refine_k=64, refine_topk=8):
+                  refine_rounds=0, refine_k=64, refine_topk=8, greedy=True):
     """在均匀采样的候选集上按策略打分选 NBV。返回 (pose, score, feats)。
 
     ckpt 可以是单个路径，也可以是路径列表——多个策略时对 logits 取平均（集成），
@@ -671,7 +705,7 @@ def select_nbv_rl(ckpt, vmap, points, weights, kinds, current_pos, current_fwd,
                          refine_rounds, refine_k, refine_topk)
     feats, valid, _ = sampler.features_for(cands)
     a, feats, valid, logp, _ = policy_action(policies, sampler, feats, valid, rng,
-                                             device=device, greedy=True)
+                                             device=device, greedy=greedy)
     return sampler.cands[a], logp, feats[a]
 
 

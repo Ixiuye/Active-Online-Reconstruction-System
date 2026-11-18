@@ -20,7 +20,7 @@
 
 ## 2. 表征设计
 
-### 2.1 体素层（`demo/voxel_map.py`）
+### 2.1 体素层（`active_recon/reconstruction/voxel_map.py`）
 
 稠密 TSDF 网格（demo 用 8 cm 体素，真实系统可换成 hash grid / nvblox）：
 
@@ -34,7 +34,7 @@
 融合采用投影 TSDF：深度图先换算到与体素相同的射线距离度量，再按截断范围加权平均。
 `unknown` 区域就是主动探索要补看的地方；`frontier` 是未知体素与自由体素相邻的边界。
 
-### 2.2 高斯层（`demo/gaussians.py`）
+### 2.2 高斯层（`active_recon/reconstruction/gaussians.py`）
 
 每个高斯绑定一个表面体素 anchor `v`，参数化为：
 
@@ -55,7 +55,7 @@
 体素置信度 `conf = w / (w + w0)`（demo 中 w0=2）。所有几何损失都乘以 conf：
 观测充分的表面约束强，弱观测/透明/超量程区域自动退化为 3DGS 主导。这是“体素是软先验而不是真值”的落点。
 
-## 3. 几何约束损失（`demo/losses.py`）
+## 3. 几何约束损失（`active_recon/reconstruction/losses.py`）
 
 总损失：
 
@@ -73,7 +73,7 @@ L = L_rgb + L_depth + lambda(t) * (1.2*L_surf + 0.5*L_norm + 1.5*L_free + 0.05*L
 课程调度 `lambda(t) = min(1, 0.4 + 0.3*t)`（t 为主动探索步）：早期体素稀疏时弱约束，随观测增多逐步加强——
 对应“体素网格和 3DGS 一起逐步完善”。
 
-## 4. 渲染器（`demo/renderer.py`）
+## 4. 渲染器（`active_recon/reconstruction/renderer.py`）
 
 一个用于演示的可微 ray-splat 渲染器：
 
@@ -84,7 +84,7 @@ L = L_rgb + L_depth + lambda(t) * (1.2*L_surf + 0.5*L_norm + 1.5*L_free + 0.05*L
 它是 3DGS “投影→排序→合成”核心的简化版：没有 tile 并行、EWA 面积归一化和球谐视角相关颜色。
 真实系统直接替换成 gsplat / diff-gaussian-rasterization 即可。
 
-## 5. 主动探索（`demo/active.py`）
+## 5. 主动探索（`active_recon/viewpoint/heuristic.py`）
 
 - **目标点**：未知 frontier 体素（权重 1.0）+ 低置信表面体素（权重 0.6）；
 - **候选位姿**：房间内的自由位置 × 注视目标（房间中心、物体、四面墙、地板、天花板）；
@@ -105,9 +105,9 @@ L = L_rgb + L_depth + lambda(t) * (1.2*L_surf + 0.5*L_norm + 1.5*L_free + 0.05*L
 **动作空间不是人工设定的**：每个决策在房间自由空间里均匀重采样 K=64 个位姿（位置用拒绝采样
 排除障碍内部；朝向朝房间内均匀采样的注视点），眼高在 0.45~1.45 m 内变化。策略对候选身份
 无记忆（纯集合打分），所以每次重采样不影响训练；K 是算力旋钮，不是先验。
-`demo/active.py` 里那张 4×3 位置 × 12 个手挑目标的表只留给启发式基线用。
+`active_recon/viewpoint/heuristic.py` 里那张 4×3 位置 × 12 个手挑目标的表只留给启发式基线用。
 
-14 维候选特征（全部只读地图，不用 GT，实现见 `demo/rl_active.py`）：
+14 维候选特征（全部只读地图，不用 GT，实现见 `active_recon/viewpoint/rl.py`）：
 
 | 组别 | 特征 |
 |---|---|
@@ -121,24 +121,27 @@ L = L_rgb + L_depth + lambda(t) * (1.2*L_surf + 0.5*L_norm + 1.5*L_free + 0.05*L
 `r = 1.0 × Δ表面体素/100 + 0.8 × 深度可分性 − 2.0 × 新深度与地图冲突比例 − 0.3 × 路程`
 其中“表面体素”= `(weight>1) & (|tsdf|<0.6)`，与 §8 的覆盖率指标同口径（第一版用“全部已知体素”，
 奖励方向和评测口径不一致，覆盖率因此偏低）；深度可分性对刚采集的一帧逐像素查 TSDF，
-按距离与入射角加权，冲突项统计新深度与已有地图表面偏离超过 1.5 个截断带的像素比例。
+按距离与入射角加权；冲突项取新帧深度点在地图上最近体素（weight>1）的 |TSDF| 均值。
+注意：冲突项目前是在该帧**融合进地图之后**计算的，口径讨论见 `ANALYSIS.md` §4.3。
+另有 `--w-rec`：在固定检验视角上把“重建深度 + 光度误差的下降量”作为奖励（默认关闭，需要 GT）。
+另有 `--w-fb`（默认 0）：融合前后用当前地图渲染**刚采集的这一帧**，以预测深度/光度误差的下降量作为奖励，不需要 GT、也不需要人工选检验视角，是替代固定 probe 的推荐方向。
 GT 只在评估时算覆盖率，不进入训练。
 
-训练协议（`train_rl.py`）：PPO，clip 0.2、GAE(γ=0.95, λ=0.95)、价值损失 0.5、熵 0.01、Adam 3e-4；
+训练协议（`active_recon/experiment/train_policy.py`）：PPO，clip 0.2、GAE(γ=0.95, λ=0.95)、价值损失 0.5、熵 0.01、Adam 3e-4；
 episode = 随机化场景（球/桌/柱位置±12 cm、半径与桌面厚度抖动）+ 随机 3~6 个初始视角 + 6 步决策。
-场景随机化是为了不在“那一个房间”上过拟合，`eval_policies.py --randomize` 就是这项的检验。
+场景随机化是为了不在“那一个房间”上过拟合，`python -m active_recon.experiment.eval_policies --randomize` 就是这项的检验。
 
 **深度噪声是这两项奖励的前提**：`--noise 0.02` 按像素给深度加 σ=2 cm 噪声。
 无噪声时“冲突”恒为 0、“可分性”几乎无区分度，奖励里的精度项等于不存在（实测过：
 `|tsdf|` 阈值写法在归一化 TSDF 上取不到，已改为对已建立表面像素求 |TSDF| 均值，
 σ=2 cm 时该值 0.28 左右，才有信号）。
 
-奖励项消融（`ablate_rl.py`，2×2：w_quality ∈ {0, 0.8} × w_conflict ∈ {0, 2.0}，
+奖励项消融（`active_recon/experiment/ablate_reward.py`，2×2：w_quality ∈ {0, 0.8} × w_conflict ∈ {0, 2.0}，
 四格均带 σ=2 cm 噪声训练 250 episode，再用同样噪声评估 12 episode）：
 
 ```bash
-python ablate_rl.py                                   # 约 15 分钟
-python ablate_rl.py --episodes 400 --noise 0.01       # 换预算/噪声
+python -m active_recon.experiment.ablate_reward                    # 约 15 分钟
+python -m active_recon.experiment.ablate_reward --episodes 400 --noise 0.01
 ```
 
 输出 `outputs/rl_ablation.json` 与 `outputs/rl_ablation.png`（覆盖率 / 深度可分性 / 路程 三联图），
@@ -149,8 +152,8 @@ python ablate_rl.py --episodes 400 --noise 0.01       # 换预算/噪声
 
 ## 6. 代码结构
 
-四层，职责单一；根目录脚本只是薄壳（`from active_recon.experiment.X import main`），
-`demo/` 保留为兼容层，旧 import 仍可用。
+代码统一在 `active_recon/` 下，入口通过 `python -m active_recon.experiment.<模块名>` 运行，根目录不再保留入口脚本。
+早期 `demo/` 兼容层与重复的旧产物目录已归档在 `_archive/2026-11-18_duplicates/`。
 
 ```
 active_recon/
@@ -185,22 +188,38 @@ active_recon/
 环境（本机已验证）：Python 3.9 + torch 2.8 + CUDA，RTX 5070。依赖见 `requirements.txt`。
 
 ```bash
-C:\Users\ixiuy\miniconda3\envs\Pytorch\python.exe run_demo.py
+C:\Users\ixiuy\miniconda3\envs\Pytorch\python.exe -m active_recon.experiment.run_demo
 ```
 
 快速冒烟（约 10 秒）：
 
 ```bash
-C:\Users\ixiuy\miniconda3\envs\Pytorch\python.exe run_demo.py --quick
+C:\Users\ixiuy\miniconda3\envs\Pytorch\python.exe -m active_recon.experiment.run_demo --quick
 ```
 
 点云对比与噪声实验（约 1 分钟）：
 
 ```bash
-C:\Users\ixiuy\miniconda3\envs\Pytorch\python.exe noise_study.py
+C:\Users\ixiuy\miniconda3\envs\Pytorch\python.exe -m active_recon.experiment.pointcloud
 ```
 
-Windows 下也可直接双击 `run.bat`，或命令行 `run.bat --quick`。
+入口已统一为 `-m active_recon.experiment.<模块名>`（根目录不再保留薄壳脚本）。
+
+重建场景可用 `--scene` 切换（默认 `demo`）：
+
+```bash
+# 原始房间：球 + 桌 + 细圆柱，8 cm 体素
+C:\Users\ixiuy\miniconda3\envs\Pytorch\python.exe -m active_recon.experiment.run_demo --scene demo
+
+# 房间 + 单个简单几何体（sphere / box / cylinder），6 cm 体素
+C:\Users\ixiuy\miniconda3\envs\Pytorch\python.exe -m active_recon.experiment.run_demo --scene primitive --primitive sphere
+
+# 房间 + 多关节串联机械臂（底座、4 个关节、连杆、两指夹爪），5 cm 体素
+C:\Users\ixiuy\miniconda3\envs\Pytorch\python.exe -m active_recon.experiment.run_demo --scene robot
+```
+
+体素边长会按场景自动选择，也可用 `--voxel` 显式覆盖（米）。
+RL 选点默认贪心；在部分长 horizon 策略上贪心会退化，可加 `--sample-policy` 改为按策略分布采样（评估侧对应 `eval_policies --sample`）。
 
 常用参数：`--steps`（主动探索步数）、`--iters-per-step`、`--static-iters`、`--rays`、
 `--max-gauss`、`--device cpu|cuda|auto`。
@@ -268,10 +287,10 @@ Windows 下也可直接双击 `run.bat`，或命令行 `run.bat --quick`。
   表里的 ±4 量级来自**评估 seed**（场景随机化 + 目标点采样），不是训练不稳定。
   要压方差应改评估协议（更多决策步 / 固定目标采样），而不是多训策略。
 - 集成用法：`--policy-ckpt a.pt,b.pt,c.pt`（logits 与 value 取平均；单权重路径不变）。
-- 决策数口径：`run_demo.py --steps N` 中 step 0 只训练不选点，故决策数 = N−1；
+- 决策数口径：`python -m active_recon.experiment.run_demo --steps N` 中 step 0 只训练不选点，故决策数 = N−1；
   现在用 `--explore-steps` 直接指定决策数（这一度造成"RL 覆盖差 6 pp"的假象）。
 
-覆盖率还受**视角预算**限制（`analyze_coverage.py` 实测，同一 GT 场景、同一口径）：
+覆盖率还受**视角预算**限制（`python -m active_recon.experiment.coverage_analysis` 实测，同一 GT 场景、同一口径）：
 
 | 视角数 | 9 | 20 | 40 | 80 | 160 | 几何上限 |
 |---|---|---|---|---|---|---|
@@ -315,11 +334,11 @@ Windows 下也可直接双击 `run.bat`，或命令行 `run.bat --quick`。
 2. **纯光度模型是“最好看、最不准”**：它的 PSNR 在所有模型中最高，但深度 RMSE 最差（15.55 cm），自由空间违规 6.48%，Chamfer 4.28 cm。这正是 3DGS 光度优化对几何欠约束的直接体现。
 3. **体素约束与深度监督的指标互有胜负**：体素模型的深度 RMSE 略高于纯深度模型（5.96 vs 5.57 cm），因为体素约束优化的是表面位置/法向/自由空间一致性，而不是单纯降低渲染深度误差；但在 Chamfer（2.17 vs 2.81 cm）、法向（9.45° vs 14.57°）和自由空间违规（0.12% vs 0.37%）上更好。论文里应当同时报告几何与渲染两类指标，不能只看 PSNR。
 
-深度图上的差异最直观。`depth_compare_models.png` 选了 4 个视角，逐列给出 GT 深度、纯光度深度与绝对误差、体素约束深度与绝对误差。纯光度模型的深度在弱纹理墙面、桌沿和圆柱附近出现明显的面外扩、漂浮和空洞，误差图在这些区域成片变亮；体素模型的误差主要集中在遮挡边缘和未观测区域。留出视角上两者的深度 RMSE 分别为 14.02 cm 和 4.88 cm，与误差图的视觉印象一致。
+深度图上的差异最直观。`depth_compare_models.png` 选了 4 个视角，逐列给出 GT 深度、纯光度深度与绝对误差、深度监督深度与绝对误差、体素约束深度与绝对误差。纯光度模型的深度在弱纹理墙面、桌沿和圆柱附近出现明显的面外扩、漂浮和空洞，误差图在这些区域成片变亮；体素模型的误差主要集中在遮挡边缘和未观测区域。留出视角上纯光度与体素约束的深度 RMSE 分别为 14.02 cm 和 4.88 cm，与误差图的视觉印象一致。
 
 ### 8.2 与点云表征的对比（噪声实验）
 
-点云是必须单独设计协议的对手：它在**点级精度**上通常占优，但存在噪声、稀疏、无法直接渲染的问题。`noise_study.py` 用同一组 9 个 RGB-D 视角、同一噪声水平和同一 GT 做了对照实验。
+点云是必须单独设计协议的对手：它在**点级精度**上通常占优，但存在噪声、稀疏、无法直接渲染的问题。`python -m active_recon.experiment.pointcloud` 用同一组 9 个 RGB-D 视角、同一噪声水平和同一 GT 做了对照实验。
 
 **对比对象**
 
